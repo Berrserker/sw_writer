@@ -1,0 +1,705 @@
+
+rollout
+IMDImport
+"SW IMD Importer"
+width: 464
+height: 250
+(
+    --------------------
+    -- User Interface --
+--------------------
+
+group "About:"
+(
+label titleLabel   "IMD Importer v 1.0"
+HyperLink addy "by Papurin Michael" align:
+# center address:"mailto:krink@mail.ru" color:(color 0 0 170) hoverColor:(color 170 0 0)
+)
+
+group
+"Import:"
+    (
+    button
+importButton
+"Import IMD..."
+)
+
+local
+appName = "IMD Importer"
+local
+PathToTexture = "C:\\3DStudioMax\\Images\\"
+
+                - - Utilities
+
+                - - Error
+handling
+fn
+ShowError
+msg =
+(
+    format "*** Error: %\n" msg
+messageBox msg title:appName;
+ok
+)
+
+fn
+FatalError
+msg =
+(
+    ShowError msg;
+throw (appName + ":" + msg)
+)
+
+fn
+Check
+condition
+msg =
+(
+    if not condition do
+    (
+    if msg == unsupplied do msg = "Check failed"
+    format "*** Check failed: %\n" msg
+    FatalError msg
+)
+)
+
+-- Binstream
+tools
+
+fn
+SkipBytes
+bstream
+count =
+(
+    local unknown
+case count of
+(
+2: unknown = ReadShort bstream  # unsigned
+4: unknown = ReadLong bstream  # unsigned
+default:
+(
+for i = 1 to count do
+(
+unknown = ReadByte bstream  # unsigned
+)
+)
+)
+)
+
+fn
+ReadFixedString
+bstream
+fixedLen =
+(
+    local str = ""
+for i = 1 to fixedLen do
+(
+str += bit.intAsChar (ReadByte bstream  # unsigned)
+)
+str
+)
+
+-- String
+utils
+
+fn
+LongToString
+num =
+(
+    local str = ""
+for i = 1 to 4 do
+(
+str += bit.intAsChar (bit.and num 0xff)
+- - num = bit.shift
+num - 8
+num /= 256
+)
+str
+)
+
+fn
+ToWindowsPath
+pakPath =
+(
+    local winPath = "\\"
+for i = 1 to pakPath.count do
+(
+if pakPath[i] == "/" then
+(
+winPath += "\\"
+) else
+(
+    winPath += pakPath[i]
+)
+)
+winPath
+)
+
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+
+struct
+IMD_point
+    (
+    x,
+    y,
+    z,
+    u,
+    v
+)
+- --------------------------------------------------------------------------
+struct
+IMD_polygon
+    (
+    a,
+    b,
+    c
+)
+- --------------------------------------------------------------------------
+struct
+IMD_vector
+    (
+    x,
+    y,
+    z
+)
+- --------------------------------------------------------------------------
+struct
+IMD_gvtx
+    (
+    point_count,
+    polygon_count,
+    material_index,
+    points,
+    polygons,
+    vnormals,
+    fnormals
+)
+- --------------------------------------------------------------------------
+struct
+IMD_gmatkoeff
+    (
+    Shininess,
+    ShinStr,
+    Diffuse,
+    SelfIllum,
+    Ambient,
+    Opacity,
+    Specular,
+    OpacFalloff,
+    Filter,
+    WireSize,
+    IOR
+)
+- --------------------------------------------------------------------------
+struct
+IMD_texture
+    (
+    type,
+    file_name,
+    koeff
+)
+- --------------------------------------------------------------------------
+struct
+IMD_gmat
+    (
+    material_name,
+    koeff,
+    texture_count,
+    textures
+)
+struct
+IMD_refpoint
+    (
+    name,
+    matrix,
+    x,
+    y,
+    z,
+    r,
+    g,
+    b,
+    a
+)
+struct
+IMD_gref
+    (
+    ref_count,
+    refs
+)
+struct
+IMD_sphera
+    (
+    x,
+    y,
+    z,
+    r
+)
+struct
+IMD_gbnd
+    (
+    mainsphera,
+    count,
+    spheres
+)
+struct
+IMD_gelp
+    (
+    x,
+    y,
+    z,
+    dx,
+    dy,
+    dz
+)
+struct
+IMDReader
+    (
+    modelFilename, modelName, modelPath,
+    bstream,
+    gvtx_count,
+    gmat_count,
+    gmat,
+    gvtx,
+    gref,
+    gbnd,
+    gelp,
+
+    fn
+Open
+filename =
+(
+    modelFilename = filename
+modelName = getFilenameFile filename
+modelPath = getFileNamePath filename
+bstream = fopen filename "rb"
+ok
+),
+
+fn
+Close =
+(
+    fclose bstream
+ok
+),
+
+fn
+ReadGMAT =
+(
+    SkipBytes bstream 4
+local str_size = ReadLong bstream  # unsigned
+local material_name = ReadFixedString bstream str_size
+local x, y, x
+local Shininess = ReadFloat bstream
+local ShinStr = ReadFloat bstream
+x = ReadFloat bstream
+y = ReadFloat bstream
+z = ReadFloat bstream
+local Diffuse = IMD_vector x:x y:y z:z
+local SelfIllum = ReadFloat bstream
+x = ReadFloat bstream
+y = ReadFloat bstream
+z = ReadFloat bstream
+local Ambient = IMD_vector x:x y:y z:z
+local Opacity = ReadFloat bstream
+x = ReadFloat bstream
+y = ReadFloat bstream
+z = ReadFloat bstream
+local Specular = IMD_vector x:x y:y z:z
+local OpacFalloff = ReadFloat bstream
+x = ReadFloat bstream
+y = ReadFloat bstream
+z = ReadFloat bstream
+local Filter = IMD_vector x:x y:y z:z
+local WireSize = ReadFloat bstream
+local IOR = ReadFloat bstream
+local TextureCount = ReadLong bstream  # unsigned
+local koef = IMD_gmatkoeff Shininess:Shininess ShinStr:ShinStr Diffuse:Diffuse SelfIllum:SelfIllum Ambient:Ambient Opacity:Opacity Specular:Specular OpacFalloff:OpacFalloff Filter:Filter WireSize:WireSize IOR:IOR
+local textures =  # ()
+for i=1 to TextureCount do
+(
+local texture_type = ReadLong bstream
+local name_size = ReadLong bstream
+local file_name = ReadFixedString bstream name_size
+local texture_koeff = ReadFloat bstream
+append textures (IMD_texture type:texture_type file_name:file_name koeff:texture_koeff)
+)
+append
+gmat(IMD_gmat
+material_name: material_name
+koeff: koef
+texture_count: TextureCount
+textures: textures)
+ok
+),
+fn
+ReadGVTX =
+(
+    SkipBytes bstream 4
+local material_index = ReadLong bstream
+SkipBytes bstream 4
+local point_count = ReadLong bstream
+local polygon_count = ReadLong bstream
+local points =  # ()
+local polygons =  # ()
+local vnormals =  # ()
+local fnormals =  # ()
+for i = 1 to point_count do
+(
+local x, y, z, u, v
+x = ReadFloat bstream
+y = ReadFloat bstream
+z = ReadFloat bstream
+u = ReadFloat bstream
+v = 1 - ReadFloat bstream  -- Здесь координаты перевернуты...
+append points (IMD_point x:x y:y z:z u:u v:v)
+)
+for i = 1 to polygon_count do
+(
+local a, b, c
+a = 1 + ReadShort bstream  # unsigned
+b = 1 + ReadShort bstream  # unsigned
+c = 1 + ReadShort bstream  # unsigned
+append polygons (IMD_polygon a:a
+b: b
+c: c)
+)
+for i = 1 to point_count do
+(
+local x, y, z
+x = ReadFloat bstream
+y = ReadFloat bstream
+z = ReadFloat bstream
+append vnormals (IMD_vector x:x
+y: y
+z: z)
+)
+for i = 1 to polygon_count do
+(
+local x, y, z
+x = ReadFloat bstream
+y = ReadFloat bstream
+z = ReadFloat bstream
+append fnormals (IMD_vector x:x
+y: y
+z: z)
+)
+append
+gvtx(IMD_gvtx
+point_count: point_count
+polygon_count: polygon_count
+material_index: material_index
+points: points
+polygons: polygons
+vnormals: vnormals
+fnormals: fnormals)
+ok
+),
+fn
+ReadGREF =
+(
+    SkipBytes bstream 4
+local count = ReadLong bstream
+local refs =  # ()
+for i = 1 to count do
+(
+local size = ReadLong bstream
+local name = ReadFixedString bstream size
+local matrix =  # ()
+matrix.count = 4
+for j = 1 to 4 do
+(
+local row =  # ()
+row.count = 4
+for k = 1 to 4 do
+(
+row[k] = ReadFloat bstream
+)
+matrix[j] = row
+)
+local
+x, y, z
+x = ReadFloat
+bstream
+y = ReadFloat
+bstream
+z = ReadFloat
+bstream
+r = ReadByte
+bstream
+g = ReadByte
+bstream
+b = ReadByte
+bstream
+a = ReadByte
+bstream
+append
+refs(IMD_refpoint
+name: name
+matrix: matrix
+x: x
+y: y
+z: z
+r: r
+g: g
+b: b
+a: a)
+)
+gref = IMD_gref
+ref_count: count
+refs: refs
+ok
+),
+fn
+ReadGBND =
+(
+    SkipBytes bstream 4
+local x = ReadFloat bstream
+local y = ReadFloat bstream
+local z = ReadFloat bstream
+local r = ReadFloat bstream
+local main = IMD_sphera x:x y:y z:x r:r
+local count = ReadLong bstream
+local spheres =  # ()
+spheres.count = count
+for i = 1 to count do
+(
+x = ReadFloat bstream
+y = ReadFloat bstream
+z = ReadFloat bstream
+r = ReadFloat bstream
+spheres[i] = IMD_sphera x:x y:y z:z r:r
+)
+gbnd = IMD_gbnd
+mainsphera: main
+count: count
+spheres: spheres
+ok
+),
+fn
+ReadGELP =
+(
+    SkipBytes bstream 4
+local x = ReadFloat bstream
+local y = ReadFloat bstream
+local z = ReadFloat bstream
+local dx = ReadFloat bstream
+local dy = ReadFloat bstream
+local dz = ReadFloat bstream
+gelp = IMD_gelp x:x y:y z:z dx:dx dy:dy dz:dz
+ok
+),
+fn
+LoadModel =
+(
+    fseek bstream 0  # seek_set
+gbnd = 0
+gelp = 0
+local sign    = ReadFixedString bstream 4
+local file_size = ReadLong bstream  # unsigned
+local size
+
+if sign != "LIBF" then
+(
+FatalError "File does not appear to be an IMD model!"
+)
+local
+i = 60
+gmat =  # ()
+gvtx =  # ()
+while (i < file_size) do
+(
+    fseek bstream i  # seek_set
+sign = ReadFixedString bstream 4
+size = ReadLong bstream  # unsigned
+if (sign == "GMAT")
+then
+    (
+    ReadGMAT()
+)
+if (sign == "GVTX")
+then
+    (
+    ReadGVTX()
+)
+if (sign == "GREF")
+then
+    (
+    ReadGREF()
+)
+if (sign == "GBND")
+then
+    (
+    ReadGBND()
+)
+if (sign == "GELP")
+then
+    (
+    ReadGELP()
+)
+i = i + size
+)
+),
+fn
+CreateMAXModel =
+(
+local
+material =  # ()
+material.count = gmat.count
+for i = 1 to gmat.count do
+(
+    material[i] = standardMaterial()
+material[i].opacity = gmat[i].koeff.Opacity * 100
+material[i].filterColor.r = gmat[i].koeff.Filter.x * 255
+material[i].filterColor.g = gmat[i].koeff.Filter.y * 255
+material[i].filterColor.b = gmat[i].koeff.Filter.z * 255
+material[i].ambient.r = gmat[i].koeff.Ambient.x * 255
+material[i].ambient.g = gmat[i].koeff.Ambient.y * 255
+material[i].ambient.b = gmat[i].koeff.Ambient.z * 255
+material[i].diffuse.r = gmat[i].koeff.Diffuse.x * 255
+material[i].diffuse.g = gmat[i].koeff.Diffuse.y * 255
+material[i].diffuse.b = gmat[i].koeff.Diffuse.z * 255
+material[i].specular.r = gmat[i].koeff.Specular.x * 255
+material[i].specular.g = gmat[i].koeff.Specular.y * 255
+material[i].specular.b = gmat[i].koeff.Specular.z * 255
+material[i].name = gmat[i].material_name
+for j = 1 to gmat[i].textures.count do
+(
+local texture = bitmaptexture()
+texture.filename = PathToTexture + gmat[i].textures[j].file_name
+--               texture.coordinates.mapping = 0
+texture.coords.mapping = 0
+material[i].maps[gmat[i].textures[j].type+1] = texture
+material[i].mapAmounts[gmat[i].textures[j].type+1] = gmat[i].textures[j].koeff * 100
+)
+)
+for j = 1 to gvtx.count do
+(
+    local vert =  # ()
+local tvert =  # ()
+local face =  # ()
+for i = 1 to gvtx[j].points.count do
+(
+local x, y, z
+x = ((gvtx[j]).points[i]).x
+y = ((gvtx[j]).points[i]).y
+z = ((gvtx[j]).points[i]).z
+append
+vert([x, y, z])
+x = gvtx[j].points[i].u
+y = gvtx[j].points[i].v
+z = 0
+append
+tvert([x, y, z])
+)
+for i = 1 to gvtx[j].polygons.count do
+(
+append face ([gvtx[j].polygons[i].a, gvtx[j].polygons[i].b, gvtx[j].polygons[i].c])
+)
+local theMesh = mesh name:("OBJ")
+vertices: vert
+faces: face
+material: material[gvtx[j].material_index + 1]
+tverts: tvert
+for i=1 to gvtx[j].points.count do
+(
+vec = Point3 gvtx[j].vnormals[i].x gvtx[j].vnormals[i].y gvtx[j].vnormals[i].z
+setNormal theMesh i vec
+)
+buildTVFaces theMesh false
+
+for i = 1 to theMesh.numfaces do (setTVFace theMesh i (getFace theMesh i))
+
+
+update theMesh
+gc()
+)
+for i=1 to gref.ref_count do
+(
+    Point pos:[0, 0, 0] isSelected: on
+$.size = 1
+$.Box = on
+$.centermarker = on
+$.axistripod = on
+$.cross = on
+$.wirecolor = color gref.refs[i].r gref.refs[i].g gref.refs[i].b gref.refs[i].a
+tm = Matrix3 1
+vec = Point3 0 0.25 0
+translate tm vec
+vec.x = gref.refs[i].x * 2
+vec.y = gref.refs[i].y * 2
+vec.z = gref.refs[i].z * 2
+scale tm vec
+v1 = Point3 gref.refs[i].matrix[1][1] gref.refs[i].matrix[1][2] gref.refs[i].matrix[1][3]
+v2 = Point3 gref.refs[i].matrix[2][1] gref.refs[i].matrix[2][2] gref.refs[i].matrix[2][3]
+v3 = Point3 gref.refs[i].matrix[3][1] gref.refs[i].matrix[3][2] gref.refs[i].matrix[3][3]
+v4 = Point3 gref.refs[i].matrix[4][1] gref.refs[i].matrix[4][2] gref.refs[i].matrix[4][3]
+tm1 = Matrix3 v1 v2 v3 v4
+tm = tm * tm1
+$.transform = tm
+$.name = gref.refs[i].name
+)
+if (gbnd != 0)then
+(
+    s = Sphere pos:[gbnd.mainsphera.x, gbnd.mainsphera.y, gbnd.mainsphera.z] radius:gbnd.mainsphera.r name:"GBND"
+s.renderable = off
+hide s
+for i=1 to gbnd.count do
+(
+s = Sphere pos:[gbnd.spheres[i].x, gbnd.spheres[i].y, gbnd.spheres[i].z] radius:gbnd.spheres[i].r name:"GBND"
+s.renderable = off
+hide s
+)
+)
+if (gelp != 0)then
+(
+    s = Sphere pos:[gelp.x, gelp.y, gelp.z] radius:1 name:"GELP"
+scale s[gelp.dx, gelp.dy, gelp.dz]
+s.renderable = off
+hide s
+)
+)
+)
+
+on
+importButton
+pressed
+do
+    (
+    local
+modelFilename = getOpenFileName
+caption: "Import IMD Model" \
+    types: "IMD file (*.imd)|*.imd|All Files (*.*)|*.*|"
+print
+"Start"
+if modelFilename != undefined
+then
+    (
+if DoesFileExist modelFilename then
+(
+    local reader = IMDReader()
+local
+fileType = getFileNameType
+modelFileName
+
+reader.Open
+modelFilename
+reader.LoadModel()
+reader.CreateMAXModel()
+reader.Close()
+
+max
+views
+redraw
+)
+)
+)
+)
+
+--   -------------------------------------------------------------------
+fn
+IMDImportFull =
+(
+    createDialog IMDImport
+)
+IMDImportFull()
